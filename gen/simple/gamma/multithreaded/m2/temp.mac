@@ -1,0 +1,11 @@
+#/RMG/Manager/Logging/LogLevel debug
+
+/RMG/Geometry/IncludeGDMLFile /mnt/atlas01/users/neuberger/L1K_simulations/mage/cosm_sims_mage/gen/misc/remage/runtime_tests/geoms/lar_world_volume.gdml
+
+/run/initialize
+
+/RMG/Generator/Select GPS
+/gps/particle gamma
+/gps/energy 1 MeV
+
+/run/beamOn NUMBER_MUONS_PLACEHOLDER

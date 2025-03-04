@@ -1,0 +1,15 @@
+#/RMG/Manager/Logging/LogLevel debug
+
+/RMG/Geometry/IncludeGDMLFile /mnt/atlas01/users/neuberger/L1K_simulations/mage/cosm_sims_mage/gen/misc/remage/runtime_tests/geoms/lar_world_volume.gdml
+
+/RMG/Geometry/RegisterDetector Scintillator lar_p 0
+
+/RMG/Output/FileName tmp.hdf5
+
+/run/initialize
+
+/RMG/Generator/Select GPS
+/gps/particle e-
+/gps/energy 1 MeV
+
+/run/beamOn NUMBER_MUONS_PLACEHOLDER
