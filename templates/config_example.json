@@ -1,0 +1,39 @@
+{
+  "simulation": {
+    "m_steps": [1, 2, 4, 8, 16, 32, 64, 128],
+    "n_primaries": 10000,
+    "execution_mode": "multithreaded_fix",
+    "physics_list": "FTFP_BERT",
+    "additional_args": [],
+    "output_dir": "/var/tmp",
+    "template_dir": "templates",
+    "container": "legendexp/remage:latest",
+    "executable": "/global/cfs/cdirs/m2676/users/neuberger/remage_runtime_test_env/sw/standard/install/bin/remage-cpp"
+  },
+  "cluster": {
+    "partition": "regular",
+    "time_limit": "00:15:00",
+    "memory": "4GB",
+    "nodes": 1,
+    "tasks_per_node": 1,
+    "cpus_per_task": 1,
+    "constraint": "cpu",
+    "mail_user": "moritz.neuberger@tum.de",
+    "additional_sbatch_args": []
+  },
+  "test": {
+    "repetitions": 3,
+    "dry_run": false,
+    "overwrite": false,
+    "skip_existing": true
+  },
+  "project_name": "simple_electron_runtime_test",
+  "results_file": "runtime_estimates.json",
+  "_comments": {
+    "simulation.m_steps": "List of thread/process counts to test",
+    "simulation.execution_mode_options": "multithreaded_fix, multithreaded_scaled, multiprocessed_fix, multiprocessed_scaled",
+    "simulation.execution_mode_explained": "multithreaded uses --threads arg, multiprocessed runs multiple processes; _fix keeps primaries constant, _scaled multiplies primaries by m_step",
+    "cluster.time_limit": "SLURM time limit in HH:MM:SS format",
+    "test.repetitions": "How many times to repeat each test for statistical analysis"
+  }
+}

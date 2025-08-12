@@ -1,0 +1,36 @@
+# L200 geometry electron simulation template
+
+/run/numberOfThreads 1
+
+# Enable optical physics processes
+/RMG/Processes/OpticalPhysics true
+/RMG/Processes/OpticalPhysicsMaxOneWLSPhoton true
+
+/RMG/Geometry/IncludeGDMLFile /global/homes/m/moritzn/cdir_neuberger/remage_runtime_test_env/geoms/l200_geom.gdml
+
+/RMG/Geometry/RegisterDetectorsFromGDML Optical
+/RMG/Geometry/RegisterDetectorsFromGDML Germanium
+/RMG/Geometry/RegisterDetector Scintillator lar 1
+
+/RMG/Manager/PrintProgressModulo 1000
+/RMG/Geometry/GDMLDisableOverlapCheck true
+
+/run/initialize
+
+/RMG/Output/Germanium/DiscardPhotonsIfNoGermaniumEdep
+
+/RMG/Generator/Confine Volume
+/RMG/Generator/Confinement/Physical/AddVolume pen_.*
+/RMG/Generator/Confinement/MaxSamplingTrials 1000
+/RMG/Generator/Confinement/SampleOnSurface false
+
+/RMG/Generator/Select GPS
+/gps/particle e-
+/gps/energy 5 MeV
+/gps/ang/type iso
+
+/RMG/Output/Germanium/EdepCutLow 1700 keV
+/RMG/Output/HDF5/MinNHits 1
+/RMG/Output/HDF5/FileName OUTPUT_HDF5_PLACEHOLDER
+
+/run/beamOn NUMBER_PIMARY_PLACEHOLDER

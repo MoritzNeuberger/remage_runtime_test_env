@@ -1,0 +1,25 @@
+# Simple electron simulation template for runtime testing
+
+/run/numberOfThreads 1
+
+/RMG/Geometry/IncludeGDMLFile /global/homes/m/moritzn/cdir_neuberger/remage_runtime_test_env/geoms/lar_world_volume.gdml
+
+/RMG/Manager/PrintProgressModulo 1000
+/RMG/Geometry/GDMLDisableOverlapCheck true
+
+/run/initialize
+
+/RMG/Generator/Confine Volume
+/RMG/Generator/Confinement/Physical/AddVolume lar_.*
+/RMG/Generator/Confinement/MaxSamplingTrials 1000
+/RMG/Generator/Confinement/SampleOnSurface false
+
+/RMG/Generator/Select GPS
+/gps/particle e-
+/gps/energy 5 MeV
+/gps/ang/type iso
+
+/RMG/Output/HDF5/MinNHits 1
+/RMG/Output/HDF5/NtuplePerDetector false
+
+/run/beamOn NUMBER_PIMARY_PLACEHOLDER
