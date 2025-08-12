@@ -1,6 +1,5 @@
 overall_runtime_estimates.json
 runtime_estimates.json
-run.mac
 *.hdf5
 *.png
 sw
@@ -10,3 +9,4 @@ backup
 .slurm
 .output
 .vscode
+__pycache__
