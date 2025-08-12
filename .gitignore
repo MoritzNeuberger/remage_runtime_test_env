@@ -1,0 +1,12 @@
+overall_runtime_estimates.json
+runtime_estimates.json
+run.mac
+*.hdf5
+*.png
+sw
+tests
+tmp
+backup
+.slurm
+.output
+.vscode
