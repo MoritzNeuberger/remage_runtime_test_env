@@ -18,7 +18,8 @@ try:
 except ImportError:
     HAS_STYLE = False
     tolc = None
-
+    
+fig_size = (6.480314960629921, 2.1601049868766404)
 
 class ResultsPlotter:
     """Handles plotting and analysis of runtime test results."""
@@ -26,7 +27,8 @@ class ResultsPlotter:
     def __init__(self, results_file: Path):
         self.results_file = Path(results_file)
         self.data = self.load_results()
-    
+        self.title = self.data[list(self.data.keys())[0]]["config"]["project_name"]
+
     def load_results(self) -> Dict:
         """Load results from a single overall results file."""
         try:
@@ -122,16 +124,16 @@ class ResultsPlotter:
             print("No valid runtime data found")
             return None
         
-        fig, ax = plt.subplots(figsize=(10, 8))
+        fig, ax = plt.subplots(figsize=fig_size)
         
         # Plot runtime vs m_step
         ax.errorbar(m_steps, runtimes, yerr=runtime_errors,
                    marker='o', linestyle='-', linewidth=2,
                    markersize=6, color=tolc[0] if HAS_STYLE else 'C0')
         
-        ax.set_xlabel('M Step')
-        ax.set_ylabel('Runtime (seconds)')
-        ax.set_title('Runtime vs M Step')
+        ax.set_xlabel('M Step', fontdict={'fontsize': 10})
+        ax.set_ylabel('Runtime (seconds)', fontdict={'fontsize': 10})
+        ax.set_title(self.title, fontdict={'fontsize': 10})
         ax.grid(True, alpha=0.3)
         
         if output_path:
@@ -152,27 +154,27 @@ class ResultsPlotter:
         speedup, speedup_errors = self.calculate_speedup(m_steps, runtimes, runtime_errors, 
                                                         event_rates, event_rate_errors)
         
-        fig, ax = plt.subplots(figsize=(10, 8))
+        fig, ax = plt.subplots(figsize=fig_size)
         
         # Plot speedup vs m_step
         ax.errorbar(m_steps, speedup, yerr=speedup_errors,
-                   marker='o', linestyle='-', linewidth=2,
-                   markersize=6, color=tolc[1] if HAS_STYLE else 'C1',
+                   marker='.', lw=0,
+                   markersize=6, color=tolc[0] if HAS_STYLE else 'tab:blue',
                    label='Actual Speedup')
         
         # Add ideal speedup line (if this looks like a scaling test)
         if len(set(thread_counts)) > 1:  # Variable thread counts
             ideal_speedup = thread_counts / thread_counts[0]
-            ax.plot(m_steps, ideal_speedup, '--', color='gray', alpha=0.7, 
+            ax.plot(m_steps, ideal_speedup, '--', color=tolc[1] if HAS_STYLE else "tab:red", alpha=0.7, 
                    label='Ideal Speedup')
         
-        ax.set_xlabel('M Step')
-        ax.set_ylabel('Speedup')
-        ax.set_title('Speedup vs M Step')
-        ax.legend()
+        ax.set_xlabel('Number of Threads', fontdict={'fontsize': 8})
+        ax.set_ylabel('Speedup', fontdict={'fontsize': 8})
+        ax.set_title(self.title, fontdict={'fontsize': 8})
+        ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
         ax.set_xlim(0, np.max(m_steps) + 1)
-        ax.set_ylim(0, np.max(speedup) * 1.3)
+        ax.set_ylim(0, np.max(speedup) * 1.5)
         
         if output_path:
             fig.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -188,7 +190,7 @@ class ResultsPlotter:
             print("No valid runtime data found")
             return None
         
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=fig_size)
         
         # Runtime plot
         ax1.errorbar(m_steps, runtimes, yerr=runtime_errors,
@@ -196,7 +198,7 @@ class ResultsPlotter:
                     markersize=6, color=tolc[0] if HAS_STYLE else 'C0')
         ax1.set_xlabel('M Step')
         ax1.set_ylabel('Runtime (seconds)')
-        ax1.set_title('Runtime vs M Step')
+        ax1.set_title(self.title)
         ax1.set_xlim(0, np.max(m_steps) + 1)
         ax1.set_ylim(0, np.max(runtimes) * 1.3)
         ax1.grid(True, alpha=0.3)
