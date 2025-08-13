@@ -23,318 +23,211 @@ except ImportError:
 class ResultsPlotter:
     """Handles plotting and analysis of runtime test results."""
     
-    def __init__(self, results_dir: Path):
-        self.results_dir = Path(results_dir)
-        self.data = self.load_all_results()
+    def __init__(self, results_file: Path):
+        self.results_file = Path(results_file)
+        self.data = self.load_results()
     
-    def load_all_results(self) -> Dict:
-        """Load all runtime_estimates.json files from results directory."""
-        results = {}
-        
-        # Find all runtime_estimates.json files
-        pattern = self.results_dir / "**/runtime_estimates.json"
-        result_files = glob.glob(str(pattern), recursive=True)
-        
-        for file_path in result_files:
-            file_path = Path(file_path)
-            
-            # Extract key from directory structure
-            rel_path = file_path.relative_to(self.results_dir)
-            key = str(rel_path.parent)  # Use parent directory as key
-            
-            try:
-                with open(file_path) as f:
-                    data = json.load(f)
-                results[key] = data
-            except Exception as e:
-                print(f"Error loading {file_path}: {e}")
-        
-        return results
+    def load_results(self) -> Dict:
+        """Load results from a single overall results file."""
+        try:
+            with open(self.results_file) as f:
+                data = json.load(f)
+            return data
+        except Exception as e:
+            print(f"Error loading {self.results_file}: {e}")
+            return {}
     
-    def filter_results(self, pattern: str) -> Dict:
-        """Filter results based on a pattern in the key."""
-        return {k: v for k, v in self.data.items() if re.search(pattern, k)}
-    
-    def extract_m_values(self, keys: List[str]) -> np.ndarray:
-        """Extract m values from result keys."""
-        m_values = []
-        for key in keys:
-            # Try to extract m value from key (e.g., "m21" -> 21)
-            match = re.search(r'm(\d+)', key)
-            if match:
-                m_values.append(int(match.group(1)))
-            else:
-                # Try to get from data
-                if key in self.data and 'm_step' in self.data[key]:
-                    m_values.append(self.data[key]['m_step'])
+    def extract_m_step_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Extract m_step values, runtimes, runtime errors, and thread counts from data."""
+        m_steps = []
+        runtimes = []
+        runtime_errors = []
+        event_rates = []
+        event_rate_errors = []
+        thread_counts = []
         
-        return np.array(m_values)
-    
-    def plot_speedup(self, particle_type: str = "electron", 
-                    execution_modes: List[str] = None,
-                    output_path: Optional[Path] = None) -> plt.Figure:
-        """Plot speedup curves for different execution modes."""
-        
-        if execution_modes is None:
-            execution_modes = ["multithreaded", "multithreaded_scaled_primaries"]
-        
-        fig, ax = plt.subplots(figsize=(10, 8))
-        
-        colors = [tolc[i] if HAS_STYLE else f"C{i}" for i in range(len(execution_modes))]
-        
-        for i, mode in enumerate(execution_modes):
-            # Filter results for this mode and particle type
-            pattern = f"{particle_type}.*{mode}"
-            filtered_data = self.filter_results(pattern)
-            
-            if not filtered_data:
-                print(f"No data found for pattern: {pattern}")
-                continue
-            
-            # Sort by m value
-            keys = list(filtered_data.keys())
-            m_values = self.extract_m_values(keys)
-            
-            if len(m_values) == 0:
-                continue
-            
-            # Sort by m values
-            sorted_indices = np.argsort(m_values)
-            sorted_keys = [keys[i] for i in sorted_indices]
-            sorted_m_values = m_values[sorted_indices]
-            
-            # Extract performance data
-            runtimes = []
-            runtime_errors = []
-            threads = []
-            
-            for key in sorted_keys:
-                data = filtered_data[key]
-                if 'runtime' in data and 'val' in data['runtime']:
-                    runtimes.append(data['runtime']['val'])
-                    runtime_errors.append(data['runtime'].get('std', 0))
+        for key, data in self.data.items():
+            if key.startswith('m') and isinstance(data, dict):
+                # Extract m_step value from key (e.g., "m4" -> 4)
+                try:
+                    m_step = int(key[1:])
+                    m_steps.append(m_step)
                     
-                    # Try to extract thread count
-                    thread_count = 1
-                    if 'config' in data:
-                        thread_count = data['config'].get('simulation', {}).get('n_threads', 1)
-                    elif 'm_step' in data:
-                        thread_count = data['m_step']  # Assuming m_step corresponds to thread count
-                    
-                    threads.append(thread_count)
-            
-            if not runtimes:
-                continue
-            
-            # Calculate speedup relative to single thread
-            runtimes = np.array(runtimes)
-            runtime_errors = np.array(runtime_errors)
-            threads = np.array(threads)
-            
-            baseline_runtime = runtimes[0] if len(runtimes) > 0 else 1
+                    # Extract runtime data
+                    if 'runtime' in data and 'val' in data['runtime']:
+                        runtimes.append(data['runtime']['val'])
+                        runtime_errors.append(data['runtime'].get('std', 0))
+                        
+                        # Extract thread count (use m_step if not specified)
+                        thread_count = m_step
+                        if 'config' in data and 'simulation' in data['config']:
+                            # Try to get actual thread count from config
+                            sim_config = data['config']['simulation']
+                            if 'execution_mode' in sim_config:
+                                if 'scaled' in sim_config['execution_mode']:
+                                    thread_count = m_step
+                                else:
+                                    thread_count = 1  # Fixed mode
+                        
+                        thread_counts.append(thread_count)
+
+                        event_rates.append(data.get('event_rate', {}).get('val', 0))
+                        event_rate_errors.append(data.get('event_rate', {}).get('std', 0))
+                    else:
+                        # Remove this m_step if no runtime data
+                        m_steps.pop()
+
+                        
+                except ValueError:
+                    # Skip if key doesn't match expected format
+                    continue
+        
+        # Sort by m_step values
+        if m_steps:
+            sorted_indices = np.argsort(m_steps)
+            m_steps = np.array(m_steps)[sorted_indices]
+            runtimes = np.array(runtimes)[sorted_indices] 
+            runtime_errors = np.array(runtime_errors)[sorted_indices]
+            thread_counts = np.array(thread_counts)[sorted_indices]
+            event_rates = np.array(event_rates)[sorted_indices]
+            event_rate_errors = np.array(event_rate_errors)[sorted_indices]
+        
+        return m_steps, runtimes, runtime_errors, thread_counts, event_rates, event_rate_errors
+    
+    def calculate_speedup(self, m_steps: np.ndarray, runtimes: np.ndarray, runtime_errors: np.ndarray, 
+                         event_rates: np.ndarray, event_rate_errors: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Calculate speedup and its errors, preferring event rate over inverse runtime."""
+        
+        # Use event rates if available (more accurate for speedup calculation)
+        if len(event_rates) > 0 and event_rates[0] > 0:
+            baseline_rate = event_rates[0]
+            speedup = event_rates / baseline_rate
+            # Error propagation for speedup: |speedup * (rate_error / rate)|
+            speedup_errors = speedup * (event_rate_errors / event_rates)
+        else:
+            # Fallback to inverse runtime method
+            baseline_runtime = runtimes[0]
             speedup = baseline_runtime / runtimes
-            
-            # Error propagation for speedup
+            # Error propagation for speedup: |speedup * (runtime_error / runtime)|
             speedup_errors = speedup * (runtime_errors / runtimes)
-            
-            # Plot
-            ax.errorbar(threads, speedup, yerr=speedup_errors, 
-                       marker='o', linestyle='-', linewidth=2, 
-                       markersize=6, color=colors[i], 
-                       label=mode.replace('_', ' ').title())
         
-        # Ideal speedup line
-        max_threads_list = []
-        for mode in execution_modes:
-            filtered = self.filter_results(f"{particle_type}.*{mode}")
-            if filtered:
-                m_vals = self.extract_m_values(list(filtered.keys()))
-                if len(m_vals) > 0:
-                    max_threads_list.append(max(m_vals))
-        
-        if max_threads_list:
-            max_threads = max(max_threads_list)
-            ideal_x = np.linspace(1, max_threads, 100)
-            ax.plot(ideal_x, ideal_x, '--', color='gray', alpha=0.7, label='Ideal Speedup')
-        
-        ax.set_xlabel('Number of Threads')
-        ax.set_ylabel('Speedup')
-        ax.set_title(f'Multithreaded Speedup - {particle_type.title()}')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        ax.set_xlim(left=1)
-        ax.set_ylim(bottom=0)
-        
-        if output_path:
-            fig.savefig(output_path, dpi=300, bbox_inches='tight')
-        
-        return fig
+        return speedup, speedup_errors
     
-    def plot_runtime_comparison(self, particle_types: List[str] = None,
-                              execution_mode: str = "multithreaded",
-                              output_path: Optional[Path] = None) -> plt.Figure:
-        """Plot runtime comparison between particle types."""
+    def plot_runtime(self, output_path: Optional[Path] = None) -> plt.Figure:
+        """Plot runtime vs m_step for the loaded results."""
+
+        m_steps, runtimes, runtime_errors, thread_counts, event_rates, event_rate_errors = self.extract_m_step_data()
         
-        if particle_types is None:
-            particle_types = ["electron", "gamma"]
-        
-        fig, ax = plt.subplots(figsize=(10, 8))
-        
-        colors = [tolc[i] if HAS_STYLE else f"C{i}" for i in range(len(particle_types))]
-        
-        for i, particle in enumerate(particle_types):
-            pattern = f"{particle}.*{execution_mode}"
-            filtered_data = self.filter_results(pattern)
-            
-            if not filtered_data:
-                continue
-            
-            keys = list(filtered_data.keys())
-            m_values = self.extract_m_values(keys)
-            
-            # Sort by m values
-            sorted_indices = np.argsort(m_values)
-            sorted_keys = [keys[i] for i in sorted_indices]
-            sorted_m_values = m_values[sorted_indices]
-            
-            # Extract runtime data
-            runtimes = []
-            runtime_errors = []
-            
-            for key in sorted_keys:
-                data = filtered_data[key]
-                if 'runtime' in data and 'val' in data['runtime']:
-                    runtimes.append(data['runtime']['val'])
-                    runtime_errors.append(data['runtime'].get('std', 0))
-            
-            if runtimes:
-                ax.errorbar(sorted_m_values, runtimes, yerr=runtime_errors,
-                           marker='o', linestyle='-', linewidth=2,
-                           markersize=6, color=colors[i],
-                           label=particle.title())
-        
-        ax.set_xlabel('Thread Count (m)')
-        ax.set_ylabel('Runtime (seconds)')
-        ax.set_title(f'Runtime vs Thread Count - {execution_mode.replace("_", " ").title()}')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        ax.set_yscale('log')
-        
-        if output_path:
-            fig.savefig(output_path, dpi=300, bbox_inches='tight')
-        
-        return fig
-    
-    def plot_efficiency(self, particle_type: str = "electron",
-                       execution_mode: str = "multithreaded_scaled_primaries",
-                       output_path: Optional[Path] = None) -> plt.Figure:
-        """Plot parallel efficiency."""
-        
-        pattern = f"{particle_type}.*{execution_mode}"
-        filtered_data = self.filter_results(pattern)
-        
-        if not filtered_data:
-            print(f"No data found for pattern: {pattern}")
+        if len(m_steps) == 0:
+            print("No valid runtime data found")
             return None
         
-        keys = list(filtered_data.keys())
-        m_values = self.extract_m_values(keys)
-        
-        # Sort by m values
-        sorted_indices = np.argsort(m_values)
-        sorted_keys = [keys[i] for i in sorted_indices]
-        sorted_m_values = m_values[sorted_indices]
-        
-        # Extract data
-        event_rates = []
-        for key in sorted_keys:
-            data = filtered_data[key]
-            if 'event_rate' in data and data['event_rate'] and 'val' in data['event_rate']:
-                event_rates.append(data['event_rate']['val'])
-            else:
-                event_rates.append(None)
-        
-        # Calculate efficiency
         fig, ax = plt.subplots(figsize=(10, 8))
         
-        if event_rates and event_rates[0] is not None:
-            baseline_rate = event_rates[0]
-            efficiencies = []
-            threads = []
-            
-            for i, rate in enumerate(event_rates):
-                if rate is not None:
-                    thread_count = sorted_m_values[i]
-                    efficiency = rate / (baseline_rate * thread_count) * 100
-                    efficiencies.append(efficiency)
-                    threads.append(thread_count)
-            
-            ax.plot(threads, efficiencies, 'o-', linewidth=2, markersize=6,
-                   color=tolc[0] if HAS_STYLE else 'C0')
-            ax.axhline(y=100, linestyle='--', color='gray', alpha=0.7, label='100% Efficiency')
-            
-            ax.set_xlabel('Number of Threads')
-            ax.set_ylabel('Parallel Efficiency (%)')
-            ax.set_title(f'Parallel Efficiency - {particle_type.title()}')
-            ax.grid(True, alpha=0.3)
-            ax.set_ylim(0, 110)
-            ax.legend()
+        # Plot runtime vs m_step
+        ax.errorbar(m_steps, runtimes, yerr=runtime_errors,
+                   marker='o', linestyle='-', linewidth=2,
+                   markersize=6, color=tolc[0] if HAS_STYLE else 'C0')
+        
+        ax.set_xlabel('M Step')
+        ax.set_ylabel('Runtime (seconds)')
+        ax.set_title('Runtime vs M Step')
+        ax.grid(True, alpha=0.3)
         
         if output_path:
             fig.savefig(output_path, dpi=300, bbox_inches='tight')
         
         return fig
     
-    def generate_summary_report(self, output_path: Path) -> None:
-        """Generate a summary report with key statistics."""
+    def plot_speedup(self, output_path: Optional[Path] = None) -> plt.Figure:
+        """Plot speedup vs m_step for the loaded results."""
         
-        report = {
-            "total_tests": len(self.data),
-            "particle_types": [],
-            "execution_modes": [],
-            "thread_ranges": {},
-            "best_speedups": {},
-            "summary_stats": {}
-        }
+        m_steps, runtimes, runtime_errors, thread_counts, event_rates, event_rate_errors = self.extract_m_step_data()
         
-        # Analyze data
-        for key, data in self.data.items():
-            # Extract particle type
-            if "electron" in key:
-                particle = "electron"
-            elif "gamma" in key:
-                particle = "gamma"
-            else:
-                particle = "unknown"
-            
-            if particle not in report["particle_types"]:
-                report["particle_types"].append(particle)
-            
-            # Extract execution mode
-            if "multithreaded_scaled_primaries" in key:
-                mode = "multithreaded_scaled_primaries"
-            elif "multithreaded" in key:
-                mode = "multithreaded"
-            elif "multiprocessed" in key:
-                mode = "multiprocessed"
-            else:
-                mode = "unknown"
-            
-            if mode not in report["execution_modes"]:
-                report["execution_modes"].append(mode)
-            
-            # Track thread ranges
-            if 'm_step' in data:
-                m_step = data['m_step']
-                if particle not in report["thread_ranges"]:
-                    report["thread_ranges"][particle] = {"min": m_step, "max": m_step}
-                else:
-                    report["thread_ranges"][particle]["min"] = min(report["thread_ranges"][particle]["min"], m_step)
-                    report["thread_ranges"][particle]["max"] = max(report["thread_ranges"][particle]["max"], m_step)
+        if len(m_steps) == 0:
+            print("No valid runtime data found")
+            return None
         
-        # Save report
-        with open(output_path, 'w') as f:
-            json.dump(report, f, indent=2)
+        # Calculate speedup using helper method
+        speedup, speedup_errors = self.calculate_speedup(m_steps, runtimes, runtime_errors, 
+                                                        event_rates, event_rate_errors)
         
-        print(f"Summary report saved to {output_path}")
-        return report
+        fig, ax = plt.subplots(figsize=(10, 8))
+        
+        # Plot speedup vs m_step
+        ax.errorbar(m_steps, speedup, yerr=speedup_errors,
+                   marker='o', linestyle='-', linewidth=2,
+                   markersize=6, color=tolc[1] if HAS_STYLE else 'C1',
+                   label='Actual Speedup')
+        
+        # Add ideal speedup line (if this looks like a scaling test)
+        if len(set(thread_counts)) > 1:  # Variable thread counts
+            ideal_speedup = thread_counts / thread_counts[0]
+            ax.plot(m_steps, ideal_speedup, '--', color='gray', alpha=0.7, 
+                   label='Ideal Speedup')
+        
+        ax.set_xlabel('M Step')
+        ax.set_ylabel('Speedup')
+        ax.set_title('Speedup vs M Step')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_xlim(0, np.max(m_steps) + 1)
+        ax.set_ylim(0, np.max(speedup) * 1.3)
+        
+        if output_path:
+            fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        
+        return fig
+    
+    def plot_combined(self, output_path: Optional[Path] = None) -> plt.Figure:
+        """Plot both runtime and speedup in subplots."""
+        
+        m_steps, runtimes, runtime_errors, thread_counts, event_rates, event_rate_errors = self.extract_m_step_data()
+        
+        if len(m_steps) == 0:
+            print("No valid runtime data found")
+            return None
+        
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+        
+        # Runtime plot
+        ax1.errorbar(m_steps, runtimes, yerr=runtime_errors,
+                    marker='o', linestyle='-', linewidth=2,
+                    markersize=6, color=tolc[0] if HAS_STYLE else 'C0')
+        ax1.set_xlabel('M Step')
+        ax1.set_ylabel('Runtime (seconds)')
+        ax1.set_title('Runtime vs M Step')
+        ax1.set_xlim(0, np.max(m_steps) + 1)
+        ax1.set_ylim(0, np.max(runtimes) * 1.3)
+        ax1.grid(True, alpha=0.3)
+        #ax1.set_yscale('log')
+        
+        # Speedup plot using helper method
+        speedup, speedup_errors = self.calculate_speedup(m_steps, runtimes, runtime_errors,
+                                                        event_rates, event_rate_errors)
+        
+        ax2.errorbar(m_steps, speedup, yerr=speedup_errors,
+                    marker='o', linestyle='-', linewidth=2,
+                    markersize=6, color=tolc[1] if HAS_STYLE else 'C1',
+                    label='Actual Speedup')
+        
+        # Add ideal speedup if variable thread counts
+        if len(set(thread_counts)) > 1:
+            ideal_speedup = thread_counts / thread_counts[0]
+            ax2.plot(m_steps, ideal_speedup, '--', color='gray', alpha=0.7,
+                    label='Ideal Speedup')
+        
+        ax2.set_xlabel('M Step')
+        ax2.set_ylabel('Speedup')
+        ax2.set_title('Speedup vs M Step')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        ax2.set_xlim(0, np.max(m_steps) + 1)
+        ax2.set_ylim(0, np.max(speedup) * 1.3)
+        
+        plt.tight_layout()
+        
+        if output_path:
+            fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        
+        return fig

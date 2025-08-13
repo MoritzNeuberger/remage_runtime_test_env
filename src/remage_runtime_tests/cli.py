@@ -96,58 +96,138 @@ def submit_jobs():
         print("No jobs were submitted")
 
 
-def plot_results():
-    """CLI entry point for plotting results."""
-    parser = argparse.ArgumentParser(description='Plot runtime test results')
-    parser.add_argument('results_dir', help='Directory containing results')
-    parser.add_argument('--output-dir', '-o', type=Path, default='plots',
-                       help='Output directory for plots')
-    parser.add_argument('--particle-types', nargs='+', default=['electron', 'gamma'],
-                       help='Particle types to plot')
-    parser.add_argument('--plot-types', nargs='+', 
-                       choices=['speedup', 'runtime', 'efficiency', 'all'],
-                       default=['all'], help='Types of plots to generate')
+def collect_results():
+    """CLI entry point for collecting individual m_step results into a summary file."""
+    parser = argparse.ArgumentParser(description='Collect individual m_step results into a summary file')
+    parser.add_argument('config_file', help='Path to the configuration JSON file')
+    parser.add_argument('--results-dir', type=Path, 
+                       help='Directory containing individual result files (default: results/project_name)')
+    parser.add_argument('--output-file', type=Path,
+                       help='Output file for combined results (default: project_name_overall_results.json)')
+    parser.add_argument('--force', action='store_true',
+                       help='Overwrite existing summary file')
     
     args = parser.parse_args()
     
-    # Create plotter
-    plotter = ResultsPlotter(Path(args.results_dir))
+    # Load configuration
+    config = Config.from_file(args.config_file)
     
-    # Create output directory
+    # Determine results directory
+    if args.results_dir:
+        results_dir = args.results_dir
+    else:
+        results_dir = Path('results') / config.project_name
+    
+    if not results_dir.exists():
+        print(f"Error: Results directory not found: {results_dir}")
+        return 1
+    
+    # Determine output file
+    if args.output_file:
+        output_file = args.output_file
+    else:
+        output_file = results_dir / f"{config.project_name}_overall_results.json"
+    
+    # Check if output file already exists
+    if output_file.exists() and not args.force:
+        print(f"Error: Output file already exists: {output_file}")
+        print("Use --force to overwrite")
+        return 1
+    
+    # Collect individual result files
+    base_name = config.results_file.replace('_results.json', '')
+    collected_results = {}
+    missing_files = []
+    
+    for m_step in config.simulation.m_steps:
+        result_filename = f"{base_name}_m{m_step}_results.json"
+        result_file = results_dir / result_filename
+        
+        if result_file.exists():
+            try:
+                with open(result_file) as f:
+                    result_data = json.load(f)
+                collected_results[f"m{m_step}"] = result_data
+                print(f"✓ Collected results for m_step {m_step}")
+            except Exception as e:
+                print(f"✗ Error reading {result_file}: {e}")
+                missing_files.append(str(result_file))
+        else:
+            print(f"✗ Missing results file: {result_file}")
+            missing_files.append(str(result_file))
+    
+    if not collected_results:
+        print("Error: No valid result files found")
+        return 1
+    
+    if missing_files:
+        print(f"\nWarning: {len(missing_files)} result files are missing:")
+        for missing in missing_files:
+            print(f"  - {missing}")
+        print()
+    
+    # Save combined results
+    try:
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_file, 'w') as f:
+            json.dump(collected_results, f, indent=4)
+        
+        print(f"✓ Combined results saved to: {output_file}")
+        print(f"✓ Collected {len(collected_results)} m_step results")
+        return 0
+        
+    except Exception as e:
+        print(f"Error saving combined results: {e}")
+        return 1
+
+
+def plot_results():
+    """CLI entry point for plotting results."""
+    parser = argparse.ArgumentParser(description='Plot runtime test results')
+    parser.add_argument('results_file', type=Path, help='Path to the results JSON file')
+    parser.add_argument('--output-dir', type=Path, default=Path.cwd(), 
+                       help='Directory to save plots (default: current directory)')
+    parser.add_argument('--plot-type', choices=['runtime', 'speedup', 'combined'], 
+                       default='speedup', help='Type of plot to generate')
+    
+    args = parser.parse_args()
+    
+    if not args.results_file.exists():
+        print(f"Error: Results file not found: {args.results_file}")
+        return 1
+    
+    # Create output directory if it doesn't exist
     args.output_dir.mkdir(parents=True, exist_ok=True)
     
-    plot_types = args.plot_types
-    if 'all' in plot_types:
-        plot_types = ['speedup', 'runtime', 'efficiency']
-    
-    # Generate plots
-    for particle in args.particle_types:
-        if 'speedup' in plot_types:
-            fig = plotter.plot_speedup(
-                particle_type=particle,
-                output_path=args.output_dir / f"speedup_{particle}.png"
-            )
-            if fig:
-                print(f"Speedup plot saved for {particle}")
+    # Load and plot results
+    try:
+        plotter = ResultsPlotter(args.results_file)
         
-        if 'runtime' in plot_types:
-            fig = plotter.plot_runtime_comparison(
-                particle_types=[particle],
-                output_path=args.output_dir / f"runtime_{particle}.png"
-            )
-            if fig:
-                print(f"Runtime plot saved for {particle}")
+        base_name = args.results_file.stem
         
-        if 'efficiency' in plot_types:
-            fig = plotter.plot_efficiency(
-                particle_type=particle,
-                output_path=args.output_dir / f"efficiency_{particle}.png"
-            )
+        if args.plot_type == 'runtime':
+            output_path = args.output_dir / f"{base_name}_runtime.png"
+            fig = plotter.plot_runtime(output_path)
             if fig:
-                print(f"Efficiency plot saved for {particle}")
+                print(f"Runtime plot saved to: {output_path}")
+                
+        elif args.plot_type == 'speedup':
+            output_path = args.output_dir / f"{base_name}_speedup.png"
+            fig = plotter.plot_speedup(output_path)
+            if fig:
+                print(f"Speedup plot saved to: {output_path}")
+                
+        elif args.plot_type == 'combined':
+            output_path = args.output_dir / f"{base_name}_combined.png"
+            fig = plotter.plot_combined(output_path)
+            if fig:
+                print(f"Combined plot saved to: {output_path}")
+        
+    except Exception as e:
+        print(f"Error creating plots: {e}")
+        return 1
     
-    # Generate summary report
-    plotter.generate_summary_report(args.output_dir / "summary_report.json")
+    return 0
 
 
 def create_config():

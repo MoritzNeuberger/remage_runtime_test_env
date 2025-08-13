@@ -1,14 +1,14 @@
 # REMAGE Runtime Tests
 
-A refactored package for systematic runtime testing of REMAGE simulations.
+A refactored package for systematic runtime testing of REMAGE simulations with project-based organization and automatic file naming.
 
 ## Installation
 
-Install the package using uv:
+Install the package using pip in a virtual environment:
 
 ```bash
 cd remage_runtime_tests
-uv pip install -e .
+pip install -e .
 ```
 
 ## Package Structure
@@ -17,159 +17,263 @@ uv pip install -e .
 remage_runtime_tests/
 ├── src/remage_runtime_tests/
 │   ├── __init__.py          # Package initialization
-│   ├── config.py            # Configuration management
+│   ├── config.py            # Configuration management with auto-naming
 │   ├── simulation.py        # Individual simulation runner
 │   ├── submission.py        # SLURM job submission
 │   ├── plotting.py          # Results plotting and analysis
 │   └── cli.py              # Command line interface
-├── templates/               # Macro templates
-│   ├── simple_electron.mac
-│   ├── simple_gamma.mac
-│   └── l200_electron.mac
-├── config_example.json      # Example configuration
+├── templates/               # Macro templates (optional)
 ├── pyproject.toml          # Package configuration
 └── README.md               # This file
 ```
 
 ## Key Features
 
-### Simplified Structure
-- Single package with clear module separation
-- No complex nested folder structures (no more `m1/`, `m2/`, etc.)
-- Template-based macro generation
-- Output files written to `/var/tmp` with unique timestamps
-- Single configuration file controls all test parameters
+### Project-Based Organization
+- **Single project directory**: All results for a test are organized in one folder named after the `project_name`
+- **M-step in filename**: Each result file includes the m_step in its name (e.g., `project_name_m4_results.json`)
+- **No subdirectories**: No more separate `m1/`, `m2/`, etc. folders
+- **Automatic file naming**: Results files automatically named based on `project_name`
+
+### Template System
+- **Macro template specification**: Configuration specifies which macro template to use
+- **Template directory**: Templates can be stored anywhere and referenced by path
+- **Placeholder substitution**: Automatic replacement of placeholders in macro files
 
 ### Command Line Tools
 
-After installation, three CLI tools are available:
+After installation, four CLI tools are available:
 
 1. **`rrt-run`**: Run simulations locally
 2. **`rrt-submit`**: Submit SLURM jobs  
-3. **`rrt-plot`**: Generate plots from results
+3. **`rrt-collect`**: Collect individual results into summary file (necessary when using SLURM, automatic when running locally)
+4. **`rrt-plot`**: Generate plots from results
 
 ### Configuration-Driven
 
-All test parameters are controlled by a single `config.json` file:
+All test parameters are controlled by a single JSON configuration file:
 
 ```json
 {
   "simulation": {
+    "macro_template": "test.mac",
     "m_steps": [1, 2, 4, 8, 16, 32],
-    "n_primaries": 10000,
-    "execution_mode": "multithreaded",
-    "multithreaded_option": "fix",
-    "additional_args": ["--threads", "1"],
-    "container": "legendexp/remage:latest"
+    "n_primaries": 1500,
+    "execution_mode": "multithreaded_scaled",
+    "physics_list": "FTFP_BERT",
+    "additional_args": [],
+    "output_dir": "/var/tmp",
+    "template_dir": "/path/to/templates",
+    "container": "legendexp/remage:latest",
+    "executable": "/path/to/remage-cpp"
   },
   "cluster": {
-    "partition": "regular",
-    "time_limit": "00:15:00"
+    "partition": "regular", 
+    "time_limit": "00:10:00",
+    "nodes": 1,
+    "tasks_per_node": 1,
+    "cpus_per_task": 1,
+    "constraint": "cpu",
+    "mail_user": "user@example.com",
+    "additional_sbatch_args": []
   },
   "test": {
-    "start_index": 0,
-    "end_index": 3,
+    "repetitions": 1,
+    "dry_run": false,
+    "overwrite": false,
     "skip_existing": true
-  }
+  },
+  "project_name": "my_runtime_test",
+  "_description": "Description of this test configuration"
 }
 ```
 
+### Execution Modes
+
+The package supports four execution modes:
+
+- **`multithreaded_fix`**: Fixed number of primaries regardless of m_step
+- **`multithreaded_scaled`**: Number of primaries scales with m_step
+- **`multiprocessed_fix`**: Fixed number of primaries regardless of m_step  
+- **`multiprocessed_scaled`**: Number of primaries scales with m_step
+
+### Automatic File Naming
+
+- **Results files**: Automatically named `{project_name}_results.json` if not specified
+- **Individual results**: `{project_name}_m{step}_results.json` (e.g., `my_test_m4_results.json`)
+- **Overall results**: `{project_name}_overall_results.json`
+
 ## Usage Examples
 
-### 1. Create Configuration
+### 1. Run Tests Locally
 
 ```bash
-# Create a default configuration
-rrt-run --help  # Shows template creation options
+# Run tests using a configuration file
+rrt-run /path/to/my_config.json --output-dir results/
 
-# Or copy and modify the example
-cp config_example.json config.json
+# Results saved to: results/{project_name}/{project_name}_m*_results.json
 ```
 
-### 2. Run Tests Locally
-
-```bash
-# Run tests for simple electron template
-rrt-run templates/simple_electron.mac --config-file config.json
-
-# Results will be saved to results/m*/runtime_estimates.json
-```
-
-### 3. Submit to SLURM
+### 2. Submit to SLURM
 
 ```bash
 # Submit jobs for all m_steps defined in config
-rrt-submit templates/simple_electron.mac --config-file config.json
+rrt-submit /path/to/my_config.json --base-dir /path/to/project
 
 # Monitor jobs
 squeue -u $USER
+```
 
-# Job information saved to submitted_jobs.json
+### 3. Collect Results
+
+```bash
+# Collect individual m_step results into summary file
+rrt-collect /path/to/my_config.json --results-dir results/my_project
+
+# Force overwrite existing summary file
+rrt-collect /path/to/my_config.json --force
 ```
 
 ### 4. Generate Plots
 
 ```bash
-# Generate speedup plots from results
-rrt-plot results/ --output-dir plots/
+# Generate plots from summary results
+rrt-plot results/my_project_overall_results.json --output-dir plots/
 
-# Specific plot types
-rrt-plot results/ --plot-types speedup efficiency --particle-types electron
+# Generate specific plot types
+rrt-plot results/my_project_overall_results.json --plot-type speedup
+rrt-plot results/my_project_overall_results.json --plot-type runtime
+rrt-plot results/my_project_overall_results.json --plot-type combined
 ```
 
 ## Templates
 
-Templates use placeholders that get substituted:
+Templates are macro files with placeholders that get substituted during execution:
 
-- `NUMBER_PIMARY_PLACEHOLDER`: Replaced with calculated primary count
-- `OUTPUT_HDF5_PLACEHOLDER`: Replaced with unique output file path
+### Placeholders
+
+- `{TEMPLATE_DIR}`: Path to template directory
+- `{N_PRIMARIES}`: Number of primary particles (calculated based on execution mode)
+- `{N_THREADS}`: Number of threads (for multithreaded execution)
+- `{N_PROCESSES}`: Number of processes (for multiprocessed execution)
+- `{OUTPUT_DIR}`: Output directory for results
+- **Legacy placeholders** (still supported):
+  - `NUMBER_PIMARY_PLACEHOLDER`: Same as `{N_PRIMARIES}`
+  - `OUTPUT_HDF5_PLACEHOLDER`: Same as output file path
 
 ### Template Example
 
 ```bash
-# templates/simple_electron.mac
-/run/numberOfThreads 1
+# test.mac
+/RMG/Geometry/IncludeGDMLFile {TEMPLATE_DIR}/geometry.gdml
+/RMG/Output/FileName {OUTPUT_DIR}/output.h5
+
+/run/initialize
+
 /gps/particle e-
 /gps/energy 5 MeV
-/RMG/Output/HDF5/FileName OUTPUT_HDF5_PLACEHOLDER
-/run/beamOn NUMBER_PIMARY_PLACEHOLDER
+/run/beamOn {N_PRIMARIES}
+```
+
+### Template Directory Structure
+
+Templates can be organized in any directory structure. The `template_dir` in configuration specifies where to find the macro template file:
+
+```
+input/
+├── l200_hpge_only.mac
+├── l200_lar_sensitive.mac
+├── l200_full_optical.mac
+├── l200_hpge_only_config.json
+├── l200_lar_sensitive_config.json
+└── l200_full_optical_config.json
 ```
 
 ## Results Structure
 
-Results are organized hierarchically:
+Results are organized by project name in a flat structure:
 
 ```
 results/
-├── m1/runtime_estimates.json
-├── m2/runtime_estimates.json
-├── m4/runtime_estimates.json
-└── overall_runtime_estimates.json
+└── {project_name}/
+    ├── {project_name}_m1_results.json
+    ├── {project_name}_m2_results.json
+    ├── {project_name}_m4_results.json
+    ├── {project_name}_m8_results.json
+    ├── {project_name}_m16_results.json
+    ├── {project_name}_m32_results.json
+    └── {project_name}_overall_results.json
 ```
 
-Each `runtime_estimates.json` contains:
-- Runtime statistics (mean, std)
-- Event rate measurements  
-- Raw data for all iterations
-- Complete configuration snapshot
+### Result File Contents
 
-## Key Improvements
+Each individual result file (`{project_name}_m{step}_results.json`) contains:
+- **Runtime statistics**: Mean, std, min, max execution times
+- **Event rate measurements**: Events processed per second
+- **Process runtime**: Total wall-clock time including overhead
+- **Configuration snapshot**: Complete test configuration
+- **Raw data**: All individual measurements
 
-1. **Simplified Workflow**: No manual folder creation or template copying
-2. **Unique Output Files**: Timestamp-based naming prevents conflicts
-3. **Configuration-Driven**: Single file controls all parameters
-4. **Template System**: Easy to add new simulation types
-5. **Automatic Cleanup**: Temporary files are cleaned up automatically
-6. **Comprehensive Results**: Full configuration saved with each result
-7. **Flexible Plotting**: Multiple plot types and particle combinations
-8. **Job Management**: Track and manage SLURM submissions
+The overall results file combines all m_step results into a single file for analysis and plotting.
 
-## Migration from Old System
+## Example: L200 Geometry Tests
 
-The new package provides the same functionality as the original scripts:
+Here's a complete example for L200 detector runtime testing:
 
-- `sim_runner.py` → `rrt-run` + `SimulationRunner` class
-- `submit_individual_jobs.py` → `rrt-submit` + `JobSubmitter` class  
-- `misc/` notebooks → `rrt-plot` + `ResultsPlotter` class
+### 1. Configuration File (`l200_test_config.json`)
 
-Configuration replaces the complex command-line arguments and folder-specific configs.
+```json
+{
+  "simulation": {
+    "macro_template": "l200_full_optical.mac",
+    "m_steps": [1, 2, 4, 8, 16, 32],
+    "n_primaries": 1500,
+    "execution_mode": "multithreaded_scaled",
+    "physics_list": "FTFP_BERT_LIV",
+    "template_dir": "/path/to/input/templates",
+    "container": "legendexp/remage:latest",
+    "executable": "/opt/remage/bin/remage-cpp"
+  },
+  "cluster": {
+    "partition": "regular",
+    "time_limit": "04:00:00",
+    "memory": "16GB",
+    "constraint": "cpu"
+  },
+  "test": {
+    "dry_run": false,
+    "skip_existing": true
+  },
+  "project_name": "l200_full_optical_runtime_test"
+}
+```
+
+### 2. Run the Test
+
+```bash
+# Local execution
+rrt-run l200_test_config.json --output-dir ./results
+
+# SLURM submission
+rrt-submit l200_test_config.json --base-dir .
+
+# Collect results after jobs complete
+rrt-collect l200_test_config.json
+
+# Generate plots
+rrt-plot results/l200_full_optical_runtime_test/l200_full_optical_runtime_test_overall_results.json
+```
+
+### 3. Results
+
+```
+results/
+└── l200_full_optical_runtime_test/
+    ├── l200_full_optical_runtime_test_m1_results.json
+    ├── l200_full_optical_runtime_test_m2_results.json
+    ├── l200_full_optical_runtime_test_m4_results.json
+    ├── l200_full_optical_runtime_test_m8_results.json
+    ├── l200_full_optical_runtime_test_m16_results.json
+    ├── l200_full_optical_runtime_test_m32_results.json
+    └── l200_full_optical_runtime_test_overall_results.json
+```

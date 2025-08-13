@@ -30,8 +30,31 @@ class SimulationRunner:
         n_primaries = self.config.simulation.n_primaries
         if self.config.simulation.is_scaled():
             n_primaries = self.config.simulation.n_primaries * m_step
-        # Substitute placeholders
+            
+        # Get template directory
+        template_dir = Path(self.config.simulation.template_dir)
+        
+        # Calculate thread/process counts
+        n_threads = self.config.simulation.get_thread_count(m_step)
+        n_processes = self.config.simulation.get_process_count(m_step)
+            
+        # Substitute new-style placeholders
         macro_content = template_content.replace(
+            "{TEMPLATE_DIR}", str(template_dir)
+        ).replace(
+            "{N_PRIMARIES}", str(n_primaries)
+        ).replace(
+            "{N_THREADS}", str(n_threads)
+        ).replace(
+            "{N_PROCESSES}", str(n_processes)
+        ).replace(
+            "{OUTPUT_DIR}", str(output_file.parent)
+        ).replace(
+            "{OUTPUT_FILE}", str(output_file.name)
+        )
+        
+        # Substitute legacy placeholders (for backward compatibility)
+        macro_content = macro_content.replace(
             "NUMBER_PIMARY_PLACEHOLDER", str(n_primaries)
         ).replace(
             "OUTPUT_HDF5_PLACEHOLDER", str(output_file)

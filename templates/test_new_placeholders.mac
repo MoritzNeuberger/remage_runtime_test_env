@@ -1,0 +1,42 @@
+# Test template with new placeholder syntax
+# Template directory: {TEMPLATE_DIR}
+# Number of primaries: {N_PRIMARIES}
+# Number of threads: {N_THREADS}
+# Number of processes: {N_PROCESSES}
+# Output directory: {OUTPUT_DIR}
+
+# Disable optical physics for minimal overhead
+/RMG/Processes/OpticalPhysics false
+
+# Load geometry from template directory
+/RMG/Geometry/IncludeGDMLFile {TEMPLATE_DIR}/l200_geom.gdml
+
+# Register only germanium detectors (minimal setup)
+/RMG/Geometry/RegisterDetectorsFromGDML Germanium
+
+# Set output file in output directory
+/RMG/Output/FileName {OUTPUT_DIR}/output.h5
+
+/run/initialize
+
+# Configure particle generator
+/RMG/Generator/Confine Volume
+/RMG/Generator/Confinement/Physical/AddVolume pen_.*
+/RMG/Generator/Confinement/MaxSamplingTrials 1000
+/RMG/Generator/Confinement/SampleOnSurface false
+
+# Set up radioactive decay source
+/RMG/Generator/Select GPS
+/gps/particle ion
+/gps/energy 0 eV
+/gps/ang/type iso
+
+# Use Tl-208 isotope for testing
+/gps/ion 81 208
+
+# Number of primaries with new placeholder syntax
+/run/beamOn {N_PRIMARIES}
+
+# Legacy placeholders for backward compatibility:
+# Legacy primaries: NUMBER_PIMARY_PLACEHOLDER
+# Legacy output: OUTPUT_HDF5_PLACEHOLDER

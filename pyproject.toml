@@ -23,6 +23,7 @@ requires-python = ">=3.8"
 [project.scripts]
 rrt-run = "remage_runtime_tests.cli:run_simulation"
 rrt-submit = "remage_runtime_tests.cli:submit_jobs"
+rrt-collect = "remage_runtime_tests.cli:collect_results"
 rrt-plot = "remage_runtime_tests.cli:plot_results"
 
 [project.optional-dependencies]
